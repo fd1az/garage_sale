@@ -1,39 +1,70 @@
 package handlers
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/go-chi/chi"
+	"github.com/pkg/errors"
+
+	"github.com/fdiaz7/garage_sales/internal/platform/web"
 	"github.com/fdiaz7/garage_sales/internal/product"
 	"github.com/jmoiron/sqlx"
 )
 
-type Product struct {
-	DB *sqlx.DB
+type Products struct {
+	DB  *sqlx.DB
+	Log *log.Logger
 }
 
 // ListProducts show products
-func (p *Product) List(w http.ResponseWriter, r *http.Request) {
+func (p *Products) List(w http.ResponseWriter, r *http.Request) error {
 	//Empty value list no a zero value list- esto facilita a los consumidores de la api no recibir un null sino un []
 	list, err := product.List(p.DB)
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Println("Error querying db", err)
+		return err
 	}
 
-	data, err := json.Marshal(list)
+	return web.Respond(w, list, http.StatusOK)
+
+}
+
+// Retrieve a single product
+func (p *Products) Retrieve(w http.ResponseWriter, r *http.Request) error {
+	//Empty value list no a zero value list- esto facilita a los consumidores de la api no recibir un null sino un []
+	id := chi.URLParam(r, "id")
+	prod, err := product.Retrieve(p.DB, id)
+
 	if err != nil {
-		log.Println("Error writing", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("content-type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+		switch err {
+		case product.ErrNotFound:
+			return web.NewRequestError(err, http.StatusNotFound)
+		case product.ErrInvalidID:
+			return web.NewRequestError(err, http.StatusBadRequest)
+		default:
+			return errors.Wrapf(err, "looking for product %q", id)
+		}
 
-	if _, err := w.Write(data); err != nil {
-		log.Println("Error writing", err)
 	}
 
+	return web.Respond(w, prod, http.StatusOK)
+
+}
+
+//Create decode a JSON document from post request and create a new product
+func (p *Products) Create(w http.ResponseWriter, r *http.Request) error {
+	var np product.NewProduct
+	if err := web.Decoder(r, &np); err != nil {
+		return err
+	}
+
+	prod, err := product.Create(p.DB, np, time.Now())
+
+	if err != nil {
+		return err
+	}
+
+	return web.Respond(w, prod, http.StatusCreated)
 }
