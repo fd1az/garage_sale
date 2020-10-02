@@ -13,3 +13,10 @@ type Product struct {
 	DateUpdated time.Time `db:"date_updated" json:"date_updated"`
 	DateCreated time.Time `db:"date_created" json:"date_created"`
 }
+
+//NewProduct is what require from clients to create products
+type NewProduct struct {
+	Name     string `json:"name"`
+	Cost     int    `json:"cost"`
+	Quantity int    `json:"quantity"`
+}
